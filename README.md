@@ -22,12 +22,15 @@ To follow along with the workshop, you need to have the stack of tools installed
 2. Install `conda` + `mamba`. [Instructions](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html).
 
 3. Clone this repository to your computer. Open RStudio and select File -> New Project... -> Version Control -> Git, enter this repository URL: `https://github.com/antonbabkin/workshop-pythonr`  
-You can also clone using your preferred Git tool and then open project in RStudio.
+You can also clone using your preferred Git tool and then open project in RStudio. Ignore the error message about 'renv/activate.R', it will be fixed after the next step.
 
 4. Install [renv](https://rstudio.github.io/renv/) and required R packages. Packages will be installed according to specification listed in the `DESCRIPTION` file. Make sure you have the `workshop-pythonr` project open in RStudio and run the following commands in Console:
     ```
+    # install renv
     install.packages("renv")
+    # initialize renv environment, choose option "1: Use only the DESCRIPTION file."
     renv::init(bare = TRUE)
+    # install packages listed in DESCRIPTION file
     renv::install()
     ```
 

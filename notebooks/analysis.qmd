@@ -7,6 +7,8 @@ editor: source
 Before running chunks in this notebook, configure RStudio to set working directory to project root.
 Tools -> Global Options -> R Markdown -> Basic -> Evaluate chunks in directory: Project.
 
+If you get `Error: Unable to find conda binary. Is Anaconda installed?`, locate conda executable (`where conda` in Windows Command Prompt or `which conda` in Unix terminal), add path and run the alternative `use_condaenv()` function.
+
 
 ```{r}
 library(tidyverse)
@@ -15,9 +17,13 @@ library(arrow)
 
 library(reticulate)
 use_condaenv("workshop-pythonr")
+# alternative command with specific conda path
+# use_condaenv("workshop-pythonr", conda = "/path/to/conda/executable")
 
 datapy <- import("scripts.data")
 ```
+
+
 
 # prepare data
 

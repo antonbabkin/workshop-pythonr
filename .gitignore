@@ -6,6 +6,7 @@ renv
 .Rhistory
 .RData
 .Ruserdata
+.Rbuildignore
 
 *.pyc
 .ipynb_checkpoints
