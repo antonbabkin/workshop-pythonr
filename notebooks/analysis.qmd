@@ -1,0 +1,182 @@
+---
+title: "Employment growth analysis"
+format: html
+editor: source
+---
+
+Before running chunks in this notebook, configure RStudio to set working directory to project root.
+Tools -> Global Options -> R Markdown -> Basic -> Evaluate chunks in directory: Project.
+
+
+```{r}
+library(tidyverse)
+library(arrow)
+
+
+library(reticulate)
+use_condaenv("workshop-pythonr")
+
+datapy <- import("scripts.data")
+```
+
+# prepare data
+
+```{r}
+df <- datapy$get_bds_df("county")
+d <- datapy$get_ui_df()
+df <- left_join(df, d, by = "fips")
+
+df <- df |>
+  mutate(rural = !(uic %in% c(1, 2)),
+    estabs_growth_rate = estabs_entry_rate - estabs_exit_rate) |> 
+  relocate(year, fips, uic, rural, estabs, emp, net_job_creation_rate, estabs_entry_rate, estabs_exit_rate, estabs_growth_rate)
+
+df
+```
+
+# strong correlation between estabs and emp growth rates
+
+```{r}
+df |>
+  slice_sample(n = 10000) |>
+  filter(abs(estabs_growth_rate) < 50, abs(net_job_creation_rate) < 50) |>
+  ggplot(aes(estabs_growth_rate, net_job_creation_rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = "y ~ x")
+```
+
+
+```{r}
+lm(net_job_creation_rate ~ estabs_growth_rate, data = df) |>
+  summary()
+```
+
+# separate entry and exit
+
+```{r}
+df |>
+  slice_sample(n = 1000) |>
+  filter(estabs_entry_rate < 50, estabs_exit_rate < 50, abs(net_job_creation_rate) < 50) |>
+  select(net_job_creation_rate, estabs_entry_rate, estabs_exit_rate) |>
+  pairs()
+```
+
+
+```{r}
+lm(net_job_creation_rate ~ estabs_entry_rate + estabs_exit_rate, data = df) |>
+  summary()
+```
+
+
+# rural-urban difference?
+
+```{r}
+
+lm(net_job_creation_rate ~ (estabs_entry_rate + estabs_exit_rate) * rural - 1, data = df) |>
+  summary()
+
+```
+
+
+# over time
+
+
+```{r}
+coefs <- data.frame()
+years <- df |>
+  distinct(year) |>
+  arrange() |>
+  pull()
+for (y in years) {
+  m <- filter(df, year == y) |>
+    lm(net_job_creation_rate ~ estabs_entry_rate + estabs_exit_rate, data = _)
+  coefs <- rbind(coefs, m$coefficients)
+}
+colnames(coefs) <- names(m$coefficients)
+coefs <- coefs |>
+  mutate(
+    year = years,
+    entry_exit = estabs_entry_rate + estabs_exit_rate
+  )
+
+coefs |>
+  select(year, estabs_entry_rate, estabs_exit_rate) |>
+  pivot_longer(!year) |>
+  ggplot(aes(year, value, color = name)) +
+  geom_line() +
+  geom_smooth()
+
+coefs |>
+  ggplot(aes(year, entry_exit)) +
+  geom_line() +
+  geom_smooth()
+```
+
+
+# full model
+
+```{r}
+coefs <- data.frame()
+years <- df |>
+  distinct(year) |>
+  arrange() |>
+  pull()
+for (y in years) {
+  m <- filter(df, year == y) |>
+    lm(net_job_creation_rate ~ (estabs_entry_rate + estabs_exit_rate) * rural - 1, data = _)
+  coefs <- rbind(coefs, m$coefficients)
+}
+colnames(coefs) <- names(m$coefficients)
+coefs <- coefs |>
+  mutate(
+    year = years,
+    entry_urban = estabs_entry_rate,
+    exit_urban = estabs_exit_rate,
+    entry_rural = estabs_entry_rate + `estabs_entry_rate:ruralTRUE`,
+    exit_rural = estabs_exit_rate + `estabs_exit_rate:ruralTRUE`,
+    entry_exit_urban = entry_urban + exit_urban,
+    entry_exit_rural = entry_rural + exit_rural
+  )
+
+
+coefs |>
+  select(year, entry_urban, entry_rural, exit_urban, exit_rural) |>
+  pivot_longer(!year) |>
+  ggplot(aes(year, abs(value), color = name)) +
+  # geom_line() +
+  geom_smooth()
+
+coefs |>
+  select(year, entry_exit_urban, entry_exit_rural) |>
+  pivot_longer(!year) |>
+  ggplot(aes(year, value, color = name)) +
+  geom_line() +
+  geom_smooth()
+
+```
+
+
+
+# parquet
+
+```{r}
+open_dataset("data/bds_county.parquet") |> 
+  filter(st == "55", year > 2015) |>
+  select(year, fips, estabs, emp) |>
+  collect()
+
+```
+
+
+
+# model in a script
+
+
+```{r}
+source("scripts/analysis.R")
+
+estimate(1978, 2021, c(1, 2, 3, 5, 8))
+
+```
+
+

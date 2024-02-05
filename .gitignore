@@ -1,0 +1,11 @@
+data
+renv.lock
+renv
+
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+*.pyc
+.ipynb_checkpoints

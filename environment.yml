@@ -1,0 +1,17 @@
+name: workshop-pythonr
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - requests
+  - jupyterlab
+  - pandas
+  - geopandas
+  - pyarrow
+  - ipywidgets
+  - xlrd
+  - pip
+  - pip:
+    - rpy2
+
