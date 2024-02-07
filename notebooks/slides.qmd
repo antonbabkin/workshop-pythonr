@@ -1,0 +1,70 @@
+---
+title: "R and Python"
+subtitle: "in a collaborative research project"
+author: "Anton Babkin<br>babkin@wisc.edu"
+institute: UW-Madison, Applied Population Lab
+date: "February 7, 2024"
+
+format:
+  revealjs:
+    self-contained: true
+---
+
+## Collaboration challenges 1/2
+
+::: {.incremental}
+
+- Synchronization
+  - use Git for code, timestamped file names for data
+- Communication
+  - use notebooks for documentation and output
+  - but be aware of notebook limitations
+- Compute environments
+  - OS, versions, installed packages
+  - use tools like `conda` and `renv`: sandboxed environments with shareable specifications
+
+:::
+
+## Collaboration challenges 2/2
+
+::: {.incremental}
+
+- Programming language preferences
+  - use tools like `reticulate`, `rpy2`, `pystata`
+  - but only if there is no simpler way
+- Reproducibility
+  - it is hard
+  - use all of the above
+
+:::
+
+. . .
+
+Your mileage may vary!
+
+
+## Setup
+
+1. Install R and RStudio.
+2. Install `conda` + `mamba`.
+3. Clone this repository.
+4. Install R packages - renv.
+5. Install Python packages - conda.
+6. Start Jupyter Lab.
+
+. . .
+
+- `git pull`
+- `renv::install()`
+
+
+## Project overview
+
+- data (Python)
+- analysis (R)
+- dashboard (Python)
+
+Research question:<br>
+Is "creative destruction" good for job creation?
+
+

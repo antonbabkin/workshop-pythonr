@@ -13,3 +13,5 @@ renv
 
 /.quarto/
 *.html
+
+.DS_Store
