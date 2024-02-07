@@ -1,5 +1,7 @@
 """Data preparation module."""
 
+print('scripts.data module is being imported')
+
 
 from pathlib import Path
 from urllib.parse import urlparse

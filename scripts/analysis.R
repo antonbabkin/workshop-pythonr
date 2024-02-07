@@ -1,3 +1,6 @@
+cat("Sourcing from script analysis.R\n")
+cat(paste("Working directory:", getwd()))
+
 library(tidyverse)
 library(arrow)
 
@@ -15,6 +18,7 @@ estimate_model <- function(yearmin, yearmax, rural_uics) {
     collect()
   
   df <- left_join(df, d, by = "fips") |>
+    drop_na(uic, net_job_creation_rate, estabs_entry_rate, estabs_exit_rate) |>
     mutate(rural = (uic %in% rural_uics))
   
   m <- lm(net_job_creation_rate ~ (estabs_entry_rate + estabs_exit_rate) * rural - 1, data = df)

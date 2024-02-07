@@ -10,3 +10,6 @@ renv
 
 *.pyc
 .ipynb_checkpoints
+
+/.quarto/
+*.html

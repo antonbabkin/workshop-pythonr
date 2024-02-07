@@ -1,6 +1,7 @@
 Package: workshop-pythonr
 Title: Using R and Python in a collaborative research project
 Imports:
+  rmarkdown,
   reticulate,
   tidyverse,
   arrow,

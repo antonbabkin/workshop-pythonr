@@ -1,100 +1,169 @@
 ---
 title: "Employment growth analysis"
-format: html
+format:
+  html:
+    df-print: paged
+    self-contained: true
 editor: source
 ---
 
+# Working directory
+
 Before running chunks in this notebook, configure RStudio to set working directory to project root.
 Tools -> Global Options -> R Markdown -> Basic -> Evaluate chunks in directory: Project.
+If you plan to render your notebook with Quarto, you need to set `execute-dir: project` in Quarto config file (`_quarto.yml`).
+
+```{r}
+# verify that this chunk prints project root directory
+getwd()
+```
+
+# Imports
 
 If you get `Error: Unable to find conda binary. Is Anaconda installed?`, locate conda executable (`where conda` in Windows Command Prompt or `which conda` in Unix terminal), add path and run the alternative `use_condaenv()` function.
+
+If `reticulate` does not work for some other reason, take the alternative route by setting `USE_PYTHON <- FALSE`. It will read data directly from cached parquet files created in the data step.
 
 
 ```{r}
 library(tidyverse)
 library(arrow)
 
+USE_PYTHON <- TRUE
+PATH <- list(
+  bds_county = "data/bds_county.parquet",
+  uic = "data/uic.parquet"
+)
 
-library(reticulate)
-use_condaenv("workshop-pythonr")
-# alternative command with specific conda path
-# use_condaenv("workshop-pythonr", conda = "/path/to/conda/executable")
+if (USE_PYTHON) {
+  library(reticulate)
+  use_condaenv("workshop-pythonr")
+  # alternative command with specific conda path
+  # use_condaenv("workshop-pythonr", conda = "/path/to/conda/executable")
+  
+  datapy <- import("scripts.data")
+}
 
-datapy <- import("scripts.data")
 ```
 
 
+# Prepare main dataframe
 
-# prepare data
+For this exploratory analysis, we will be using one global dataframe constructed in this chunk.
+With reticulate, Python functions can be called directly from R. Python process runs in parallel, and function arguments and returned values are converted on the fly.
+
 
 ```{r}
-df <- datapy$get_bds_df("county")
-d <- datapy$get_ui_df()
-df <- left_join(df, d, by = "fips")
+if (USE_PYTHON) {
+  analysis_df <- datapy$get_bds_df("county")
+  d <- datapy$get_ui_df()
+} else {
+  analysis_df <- arrow::read_parquet(PATH$bds_county)
+  d <- arrow::read_parquet(PATH$uic)
+}
 
-df <- df |>
+analysis_df <- left_join(analysis_df, d, by = "fips") |>
+  drop_na(uic, net_job_creation_rate, estabs_entry_rate, estabs_exit_rate) |>
   mutate(rural = !(uic %in% c(1, 2)),
     estabs_growth_rate = estabs_entry_rate - estabs_exit_rate) |> 
   relocate(year, fips, uic, rural, estabs, emp, net_job_creation_rate, estabs_entry_rate, estabs_exit_rate, estabs_growth_rate)
 
-df
+analysis_df
 ```
 
-# strong correlation between estabs and emp growth rates
+# Analysis
+
+## estabs and emp growth
+
+Strong positive correlation between growth rate of the number of establishments and growth rate of employment.
 
 ```{r}
-df |>
-  slice_sample(n = 10000) |>
-  filter(abs(estabs_growth_rate) < 50, abs(net_job_creation_rate) < 50) |>
+analysis_df |>
+  filter(year == 2005, abs(estabs_growth_rate) < 50, abs(net_job_creation_rate) < 50) |>
   ggplot(aes(estabs_growth_rate, net_job_creation_rate)) +
   geom_point() +
   geom_smooth(method = "lm", formula = "y ~ x")
 ```
 
+Regression model:
+$$emp\_gr = \beta_0 + \beta_1 est\_gr$$
+
+OLS estimate: $\hat{\beta_1} = 0.87$, i.e. 1% higher establishment growth rate corresponds to 0.79% higher employment growth rate.
 
 ```{r}
-lm(net_job_creation_rate ~ estabs_growth_rate, data = df) |>
+lm(net_job_creation_rate ~ estabs_growth_rate, data = analysis_df) |>
   summary()
 ```
 
-# separate entry and exit
+## separate entry and exit
+
+As expected, employment growth rate is positively correlated with establishment entry and negatively with establishment exit.
+Interestingly, counties with higher entry rate tend to have higher exit rate.
 
 ```{r}
-df |>
-  slice_sample(n = 1000) |>
-  filter(estabs_entry_rate < 50, estabs_exit_rate < 50, abs(net_job_creation_rate) < 50) |>
+analysis_df |>
+  filter(year == 2005, estabs_entry_rate < 50, estabs_exit_rate < 50, abs(net_job_creation_rate) < 50) |>
   select(net_job_creation_rate, estabs_entry_rate, estabs_exit_rate) |>
-  pairs()
+  pairs(panel = panel.smooth)
 ```
+
+Regression model:
+$$emp\_gr = \beta_0 + \beta_1 est\_entry + \beta_2 est\_exit$$
+
+Signs of coefficient estimates confirm the relationships in the scatter plot.
+In the full sample, entries have higher (in magnitude) effect on employment growth than exits:
+1% lower exit rate corresponds to 0.72% higher employment growth, while 1% higher entry rate is associated with 0.83% higher employment growth.
 
 
 ```{r}
-lm(net_job_creation_rate ~ estabs_entry_rate + estabs_exit_rate, data = df) |>
+lm(net_job_creation_rate ~ estabs_entry_rate + estabs_exit_rate, data = analysis_df) |>
+  summary()
+```
+
+## counterfactual
+
+What will be the change in employment growth rate if both entry and exit rates increased by 1%?
+An extremely simplified "creative destruction" hypothesis predicts a positive effect.
+
+$$\Delta emp\_gr = \hat{\beta_1} + \hat{\beta_2} = 0.83 - 0.72 = 0.11$$
+
+The answer is 0.11, i.e. higher establishment churn is associated with higher employment growth rate.
+
+We will next explore this difference over time and between rural and urban counties.
+
+# Extensions
+
+## rural-urban difference?
+
+Rural county is defined here as non-metropolitan in 2013.
+We estimate a regression model with a binary rural indicator as an interaction term.
+
+$$emp\_gr = \beta_0 + \beta_1 rural + \beta_2 entry + \beta_{2r} entry * rural + \beta_3 exit + \beta_{3r} exit *rural$$
+
+On the full sample, $\hat{\beta_{2r}}$ and $\hat{\beta_{3r}}$ are significant both statistically and in magnitude, suggesting that relationship between establishment churn and employment growth rate differs between rural and urban areas.
+
+```{r}
+lm(net_job_creation_rate ~ (estabs_entry_rate + estabs_exit_rate) * rural - 1, data = analysis_df) |>
   summary()
 ```
 
 
-# rural-urban difference?
+## variation over time
 
-```{r}
+We can estimate the base model year by year to see if there are any trends in the relationship over time.
+$$emp\_gr = \beta_0 + \beta_1 est\_entry + \beta_2 est\_exit$$
 
-lm(net_job_creation_rate ~ (estabs_entry_rate + estabs_exit_rate) * rural - 1, data = df) |>
-  summary()
-
-```
-
-
-# over time
-
+Plots show estimates of $\beta_1$ and $\beta_2$ by year, and the "creative destruction" counterfactual $\beta_1 +\beta_2$.
+Series are rather noisy, but the counterfactual effect remained mostly positive throughout the period.
 
 ```{r}
 coefs <- data.frame()
-years <- df |>
+years <- analysis_df |>
   distinct(year) |>
   arrange() |>
   pull()
 for (y in years) {
-  m <- filter(df, year == y) |>
+  m <- filter(analysis_df, year == y) |>
     lm(net_job_creation_rate ~ estabs_entry_rate + estabs_exit_rate, data = _)
   coefs <- rbind(coefs, m$coefficients)
 }
@@ -110,25 +179,28 @@ coefs |>
   pivot_longer(!year) |>
   ggplot(aes(year, value, color = name)) +
   geom_line() +
-  geom_smooth()
+  geom_smooth(method = "loess", formula = "y ~ x", se = FALSE)
 
 coefs |>
   ggplot(aes(year, entry_exit)) +
   geom_line() +
-  geom_smooth()
+  geom_smooth(method = "loess", formula = "y ~ x", se = FALSE)
 ```
 
 
-# full model
+## urban-rural over time
+
+Here we estimate the urban-rural model by year and plot the entry-exit counterfactual effect for urban and rural counties over time.
+
 
 ```{r}
 coefs <- data.frame()
-years <- df |>
+years <- analysis_df |>
   distinct(year) |>
   arrange() |>
   pull()
 for (y in years) {
-  m <- filter(df, year == y) |>
+  m <- filter(analysis_df, year == y) |>
     lm(net_job_creation_rate ~ (estabs_entry_rate + estabs_exit_rate) * rural - 1, data = _)
   coefs <- rbind(coefs, m$coefficients)
 }
@@ -144,45 +216,44 @@ coefs <- coefs |>
     entry_exit_rural = entry_rural + exit_rural
   )
 
-
-coefs |>
-  select(year, entry_urban, entry_rural, exit_urban, exit_rural) |>
-  pivot_longer(!year) |>
-  ggplot(aes(year, abs(value), color = name)) +
-  # geom_line() +
-  geom_smooth()
-
 coefs |>
   select(year, entry_exit_urban, entry_exit_rural) |>
   pivot_longer(!year) |>
   ggplot(aes(year, value, color = name)) +
   geom_line() +
-  geom_smooth()
+  geom_smooth(method = "loess", formula = "y ~ x", se = FALSE)
 
 ```
 
 
 
-# parquet
 
-```{r}
-open_dataset("data/bds_county.parquet") |> 
-  filter(st == "55", year > 2015) |>
-  select(year, fips, estabs, emp) |>
-  collect()
+# Modularize complete model
 
-```
-
-
-
-# model in a script
+We wrap the estimation in a function, parametrized by start and end year and definition of rural counties.
+The function is defined in a script that can be used in other parts of the project, including calling it from Python.
 
 
 ```{r}
 source("scripts/analysis.R")
 
-estimate(1978, 2021, c(1, 2, 3, 5, 8))
+m <- estimate_model(yearmin = 1978, yearmax = 2021, rural_uics = 3:12)
+summary(m)
 
 ```
+
+
+
+# Parquet
+
+Parquet is a very efficient format for storage of tabular data, and is especially useful for working with larger-than-memory datasets.
+
+```{r}
+open_dataset(PATH$bds_county) |> 
+  filter(st == "55", year > 2015) |>
+  select(year, fips, estabs, emp) |>
+  collect()
+```
+
 
 
